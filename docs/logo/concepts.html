@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>torchbelief logo concepts</title>
+<style>
+body{margin:0;font-family:Inter,Helvetica,Arial,sans-serif;background:#F6F6F9;color:#1F2333}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px}
+h1{font-size:22px;margin:0 0 4px} p.sub{margin:0 0 22px;color:#5B6178}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:#fff;border:1px solid #E3E4EB;border-radius:14px;padding:18px}
+.card.rec{outline:2px solid #FF8A3D}
+.row{display:flex;gap:10px;margin:8px 0 12px}
+.tile{flex:1;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:14px}
+.tile.l{background:#fff;border:1px solid #EEE} .tile.d{background:#14161F}
+.tile img{width:120px;height:120px}
+.sizes{display:flex;align-items:end;gap:12px}
+.sizes img{display:block}
+h2{font-size:16px;margin:0} .tag{font-size:11px;background:#FFE7D6;color:#B23A1B;padding:2px 8px;border-radius:99px;margin-left:6px}
+.card p{font-size:13.5px;line-height:1.45;color:#3B4055;margin:6px 0 0}
+.word{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.word div{border-radius:14px;padding:22px;display:flex;justify-content:center}
+.word img{width:100%;max-width:420px}
+@media (max-width:640px){.word{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<h1>torchbelief: logo concepts</h1>
+<p class="sub">All three use the same idea: a <b>lower</b> and an <b>upper</b> bound, [Bel, Pl], drawn as a solid core inside a lighter outline.</p>
+<div class="grid">
+ <div class="card rec"><h2>A · Nested flames<span class="tag">recommended</span></h2>
+  <div class="row"><div class="tile l"><img src="mark-flames.svg"></div><div class="tile d"><img src="mark-flames.svg"></div></div>
+  <div class="sizes"><img src="mark-flames.svg" width="64"><img src="mark-flames.svg" width="32"><img src="mark-flames.svg" width="16"></div>
+  <p>The solid inner flame is <b>belief</b>, the outlined outer flame is <b>plausibility</b>, and the gap between them is the imprecision the library keeps track of. It reads as a torch, works at 16 px, and needs no explanation to look good.</p></div>
+ <div class="card"><h2>B · Lit lattice</h2>
+  <div class="row"><div class="tile l"><img src="mark-lattice.svg"></div><div class="tile d"><img src="mark-lattice.svg"></div></div>
+  <div class="sizes"><img src="mark-lattice.svg" width="64"><img src="mark-lattice.svg" width="32"><img src="mark-lattice.svg" width="16"></div>
+  <p>The Hasse diagram of 2<sup>Θ</sup>, which is literally the dense tensor layout. Each event is filled to its Bel inside a Pl ring, with a flame at Θ. The most "mathematical" option, but it turns to mush below 32 px.</p></div>
+ <div class="card"><h2>C · Bracketed flame</h2>
+  <div class="row"><div class="tile l"><img src="mark-brackets.svg"></div><div class="tile d"><img src="mark-brackets.svg"></div></div>
+  <div class="sizes"><img src="mark-brackets.svg" width="64"><img src="mark-brackets.svg" width="32"><img src="mark-brackets.svg" width="16"></div>
+  <p>A flame inside interval brackets [ ]. Bold and very legible as a favicon, but it only says "interval", not "lower vs. upper".</p></div>
+</div>
+<div class="word"><div style="background:#fff;border:1px solid #E3E4EB"><img src="wordmark-light.svg"></div><div style="background:#14161F"><img src="wordmark-dark.svg"></div></div>
+</div></body></html>

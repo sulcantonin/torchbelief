@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="torchbelief interval">
+  <defs><linearGradient id="g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#E5482B"/><stop offset="1" stop-color="#FFB547"/></linearGradient></defs>
+  <path d="M52 30 H28 V170 H52 M148 30 H172 V170 H148" fill="none" stroke="#5B6178" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M100 34 C116 62 140 82 140 116 C140 145 122 164 100 164 C78 164 60 145 60 116 C60 93 73 79 82 65 C84 81 90 90 98 95 C94 74 95 54 100 34 Z" fill="url(#g)"/>
+</svg>

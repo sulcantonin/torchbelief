@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="torchbelief">
+  <defs>
+    <linearGradient id="core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#E5482B"/><stop offset="1" stop-color="#FFB547"/>
+    </linearGradient>
+  </defs>
+  <!-- outer flame = plausibility (upper), inner flame = belief (lower); the gap is the imprecision -->
+  <path d="M100 14 C121 52 162 78 162 126 C162 164 134 190 100 190 C66 190 38 164 38 126 C38 95 56 77 69 58 C71 79 79 92 92 99 C87 69 91 40 100 14 Z"
+        fill="#FF8A3D" fill-opacity="0.16" stroke="#FF8A3D" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M100 80 C113 99 134 114 134 141 C134 163 119 178 100 178 C81 178 66 163 66 141 C66 122 78 110 85 99 C87 111 92 118 99 121 C96 106 96 94 100 80 Z"
+        fill="url(#core)"/>
+</svg>
