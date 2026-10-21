@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
 import torchbelief as tb  # noqa: E402
 import tracking  # noqa: E402  (examples/tracking.py: the belief layer for YOLO tracks)
+import multi_agent  # noqa: E402  (examples/multi_agent.py: LLM agents as belief functions)
 from torchbelief import belnap, choice, inconsistency as I  # noqa: E402
 from torchbelief.continuous import RandomInterval  # noqa: E402
 
@@ -520,9 +521,78 @@ def fig_tracking(t):
     return fig
 
 
+# ---- 11. a team of LLM agents ----------------------------------------------------------------------
+
+def _intervals(ax, rows, t, hi=None):
+    """Bel / Pl bars, one per (label, bel, pl) row, top to bottom."""
+    n = len(rows)
+    for k, (lab, bel, pl) in enumerate(rows):
+        y = n - 1 - k
+        ax.add_patch(Rectangle((0, y - 0.18), 1, 0.36, color=t["grid"], lw=0))
+        ax.add_patch(Rectangle((0, y - 0.18), bel, 0.36, color=t["series"][0], lw=0))
+        ax.add_patch(Rectangle((bel, y - 0.18), pl - bel, 0.36, color=t["band"], lw=0))
+        ax.text(1.03, y, f"[{bel:.2f}, {pl:.2f}]", va="center", fontsize=9, color=t["ink2"])
+    ax.set_xlim(0, 1); ax.set_ylim(-0.6, n - 0.4)
+    ax.set_yticks(range(n - 1, -1, -1), [r[0] for r in rows])
+    ax.set_xticks([0, 0.5, 1], ["0", "0.5", "1"])
+    ax.tick_params(axis="y", length=0)
+    ax.spines["left"].set_visible(False)
+
+
+def fig_agents(t):
+    """Real replies of Qwen2.5-1.5B-Instruct as five agents (examples/multi_agent.py --local),
+    scored at temperature 5."""
+    with open(os.path.join(os.path.dirname(__file__), "data", "multi-agent-qwen2.5-1.5b.json")) as fh:
+        replies = json.load(fh)
+    T = 5.0
+    fr = tb.Frame(len(multi_agent.CAUSES), names=multi_agent.CAUSES)
+    names = list(replies["round1"])
+    m1 = [multi_agent.to_mass(replies["round1"][a], fr, T) for a in names]
+    phi = I.shapley_blame([tb.Capacity.from_mass(m, fr) for m in m1]).numpy()
+
+    def deploy(m):
+        bel, pl = tb.interval(m, fr)
+        return float(bel[0]), float(pl[0])
+
+    team_d, _ = multi_agent.fuse(m1, fr, "dempster")
+    team_c, alpha = multi_agent.fuse(m1, fr, "cautious")
+    m2 = [tb.discount(multi_agent.to_mass(replies["round2"][a], fr, T), alpha[i], fr) for i, a in enumerate(names)]
+    debate = {r: tb.combine([team_c] + m2, fr, r)[0] for r in ("dempster", "cautious")}
+    early, _ = multi_agent.fuse([m1[names.index("logs")], m1[names.index("history")]], fr, "cautious")
+    eb, ep = tb.interval(early, fr)
+
+    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(12.5, 3.6), gridspec_kw=dict(width_ratios=[1, 1.15, 1]))
+    y = list(range(len(names) - 1, -1, -1))
+    worst = int(phi.argmax())
+    a1.barh(y, phi, height=0.55, color=[t["series"][1] if i == worst else t["series"][0] for i in range(len(names))])
+    for yy, v in zip(y, phi):
+        a1.text(v + 0.012, yy, f"{v:.2f}", va="center", fontsize=9.5, color=t["ink2"])
+    a1.set_yticks(y, names); a1.tick_params(axis="y", length=0)
+    a1.spines["left"].set_visible(False)
+    a1.set_xlim(0, 0.75); a1.set_xticks([0, 0.25, 0.5, 0.75], ["0", "0.25", "0.5", "0.75"])
+    a1.grid(axis="x", color=t["grid"], lw=0.8); a1.set_axisbelow(True)
+    titled(a1, "1 · Who contradicts the team?", "Shapley blame; history matched an old\nDNS incident", t)
+
+    _intervals(a2, [("round 1, Dempster", *deploy(team_d)), ("round 1, cautious", *deploy(team_c)),
+                    ("+ debate, Dempster", *deploy(debate["dempster"])),
+                    ("+ debate, cautious", *deploy(debate["cautious"]))], t)
+    titled(a2, "2 · How sure is the team of “deploy”?",
+           "five prompts on one model are not independent;\nDempster multiplies them up to certainty", t)
+
+    _intervals(a3, [(c, float(eb[i]), float(ep[i])) for i, c in enumerate(fr.names)], t)
+    titled(a3, "3 · Early: only logs and history replied",
+           f"no cause beats the others: {multi_agent.label(early, fr).replace(' | ', ', ')}\n→ wait or escalate", t)
+
+    handles = [Rectangle((0, 0), 1, 1, color=t["series"][0]), Rectangle((0, 0), 1, 1, color=t["band"])]
+    fig.legend(handles, ["Bel: guaranteed", "up to Pl: still possible"], loc="lower center", ncol=2,
+               bbox_to_anchor=(0.62, -0.08), fontsize=9.5)
+    fig.subplots_adjust(wspace=0.75)
+    return fig
+
+
 FIGURES = {"pipeline": fig_pipeline, "intervals": fig_intervals, "powerset": fig_powerset,
            "rules": fig_rules, "blame": fig_blame, "abstain": fig_abstain, "ood": fig_ood,
-           "pbox": fig_pbox, "belnap": fig_belnap, "tracking": fig_tracking}
+           "pbox": fig_pbox, "belnap": fig_belnap, "tracking": fig_tracking, "agents": fig_agents}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

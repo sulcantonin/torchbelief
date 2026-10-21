@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,31 @@ name = "torchbelief"
 version = "0.2.0"
 description = "Differentiable belief functions (Dempster-Shafer, Yager, TBM, Dubois-Prade, ...) and decision rules in PyTorch"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Antonin Sulc" }]
 requires-python = ">=3.9"
-keywords = ["belief functions", "Dempster-Shafer", "evidential", "uncertainty", "pytorch"]
+keywords = ["belief functions", "Dempster-Shafer", "evidential", "uncertainty", "pytorch",
+            "imprecise probability", "sensor fusion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
 dependencies = ["torch>=2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/sulcantonin/torchbelief"
+Documentation = "https://github.com/sulcantonin/torchbelief/blob/main/docs/visual-guide.md"
+Changelog = "https://github.com/sulcantonin/torchbelief/blob/main/CHANGELOG.md"
+Issues = "https://github.com/sulcantonin/torchbelief/issues"
 
 [tool.setuptools]
 packages = ["torchbelief"]

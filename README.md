@@ -1,20 +1,20 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/wordmark-dark.svg">
-    <img src="docs/logo/wordmark-light.svg" alt="torchbelief" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/logo/wordmark-dark.svg">
+    <img src="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/logo/wordmark-light.svg" alt="torchbelief" width="420">
   </picture>
 </p>
 
 <p align="center"><b>Differentiable belief functions and imprecise probabilities for PyTorch.</b><br>
 Fuse sources that disagree, find out which one is wrong, and decide, or abstain, when the evidence doesn't single out an answer.</p>
 
-<p align="center"><b>New to belief functions? Start with the <a href="docs/visual-guide.md">visual guide</a></b>: ten pictures, no theory required.</p>
+<p align="center"><b>New to belief functions? Start with the <a href="https://github.com/sulcantonin/torchbelief/blob/main/docs/visual-guide.md">visual guide</a></b>: ten pictures, no theory required.</p>
 
 ---
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/pipeline-dark.svg">
-  <img src="docs/figures/pipeline-light.svg" alt="Five steps: describe the evidence, convert it to a Capacity, check for disagreement, fuse the sources, decide or abstain.">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/pipeline-dark.svg">
+  <img src="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/pipeline-light.svg" alt="Five steps: describe the evidence, convert it to a Capacity, check for disagreement, fuse the sources, decide or abstain.">
 </picture>
 
 A probability gives one number per event. `torchbelief` keeps **two**, a lower and an upper bound
@@ -27,8 +27,8 @@ The logo shows the same idea: the solid inner flame is **belief**, the outlined 
 ## Install
 
 ```bash
-pip install -e .            # from a clone; needs Python ≥ 3.9 and torch ≥ 2.0
-pip install -e ".[dev]"     # + pytest
+pip install torchbelief     # needs Python ≥ 3.9 and torch ≥ 2.0
+pip install -e ".[dev]"     # from a clone, + pytest
 ```
 
 ## Quickstart
@@ -58,13 +58,46 @@ choice.decide_or_abstain(fused, torch.eye(3))  # tensor(0) → "car"   (−1 wou
 
 ### On real video
 
-<img src="docs/figures/tracking-demo.webp" alt="YOLO11n with ByteTrack on a rainy street. For each track a side panel shows YOLO's label this frame and torchbelief's label with its belief interval per class; where YOLO flips between car and truck, torchbelief shows car, or car or truck.">
+<img src="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/tracking-demo.webp" alt="YOLO11n with ByteTrack on a rainy street. For each track a side panel shows YOLO's label this frame and torchbelief's label with its belief interval per class; where YOLO flips between car and truck, torchbelief shows car, or car or truck.">
 
 YOLO with ByteTrack on real traffic. YOLO relabels every frame, so a hatchback flickers between
-"car" and "truck". A belief function per track ([`examples/tracking.py`](examples/tracking.py),
+"car" and "truck". A belief function per track ([`examples/tracking.py`](https://github.com/sulcantonin/torchbelief/blob/main/examples/tracking.py),
 two lines per frame) says "car or truck" while the evidence is split. Across the clip, YOLO
-changes label 74 times and torchbelief 20 times. The [visual guide](docs/visual-guide.md#9-real-video-labels-that-dont-flicker)
+changes label 74 times and torchbelief 20 times. The [visual guide](https://github.com/sulcantonin/torchbelief/blob/main/docs/visual-guide.md#9-real-video-labels-that-dont-flicker)
 explains how.
+
+### With a team of LLM agents
+
+Five agents look for the root cause of an outage, each with one slice of the evidence: logs,
+metrics, the deploy diff, network flows, past incidents. [`examples/multi_agent.py`](https://github.com/sulcantonin/torchbelief/blob/main/examples/multi_agent.py)
+turns each reply into a belief function over the causes `deploy, database, network, dns, cache`:
+
+- **API models** (`--live`, Claude) name a *set* of plausible causes and a confidence. The set is a
+  focal set, so "not the network" and "can't tell" need no special handling.
+- **Local models** (`--local`, any Hugging Face causal LM) are not asked for a confidence. Each
+  cause name is scored by its token log-probability after the prompt. The probability the model
+  puts on *none* of the names is treated as ignorance, so an agent that would rather answer
+  something else is discounted automatically.
+
+With Qwen2.5-1.5B-Instruct as every agent (`--temperature 5`, replies saved in
+[`docs/data`](https://github.com/sulcantonin/torchbelief/blob/main/docs/data/multi-agent-qwen2.5-1.5b.json)):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/agents-dark.svg">
+  <img src="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/agents-light.svg" alt="Three panels. Shapley blame: the history agent gets 0.53, the other four agents 0.08 or less. Team belief in deploy: Dempster's rule gives 0.99 to 1.00 and 1.00 after a debate round; the cautious rule gives 0.79 to 0.95 and 0.84 to 0.97 after the debate. With only the logs and history agents replied, deploy, network and dns are all still possible.">
+</picture>
+
+The agent that matched an old DNS incident takes most of the blame. With only two replies in,
+no cause beats the others yet, so the system waits or escalates. A debate round adds no new
+evidence; Dempster's rule still counts it as new and reaches certainty, while the cautious
+rule does not.
+
+Two settings matter for local models. Instruct models put nearly all probability on one token,
+so `--temperature T` flattens the scores (log-probabilities divided by T) before they become
+beliefs. And five prompts on one base model are not five independent witnesses: Dempster's rule
+(`--rule dempster`, the default, right for different models or non-overlapping evidence) fuses
+four agents at 0.5–0.9 into 0.99, while the cautious rule (`--rule cautious`) does not count
+their shared knowledge twice.
 
 ## The core idea
 
@@ -103,8 +136,8 @@ All take masses `(..., 2**n)`; the two-source rules return `(mass, conflict)`. `
 folds any of them over many sources. The rules differ mainly in what they do with the conflicting mass:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/rules-dark.svg">
-  <img src="docs/figures/rules-light.svg" alt="Stacked bars: two disagreeing sources combined by seven rules; each rule puts the conflicting mass somewhere different.">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/rules-dark.svg">
+  <img src="https://raw.githubusercontent.com/sulcantonin/torchbelief/main/docs/figures/rules-light.svg" alt="Stacked bars: two disagreeing sources combined by seven rules; each rule puts the conflicting mass somewhere different.">
 </picture>
 
 | Rule | Where the conflict goes | Assoc. | Idempotent | Use when |
@@ -169,7 +202,7 @@ Utilities are a matrix `U (acts, n)`; `-1` means abstain.
 Losses: `pignistic_nll`, `belief_nll` (−log Bel{y}), `plausibility_nll` (−log Pl{y}),
 `hurwicz_nll(λ)` interpolating the two, and `nonspecificity_penalty`.
 
-From [`examples/evidential_classifier.py`](examples/evidential_classifier.py), probing far from the training blobs:
+From [`examples/evidential_classifier.py`](https://github.com/sulcantonin/torchbelief/blob/main/examples/evidential_classifier.py), probing far from the training blobs:
 
 ```
 EvidentialHead + MLP          PrototypeHead (ENN)
@@ -186,10 +219,14 @@ python examples/sensor_fusion.py          # measures, blame, 5 rules × raw/disc
 python examples/evidential_classifier.py  # Dirichlet head vs ENN, in- and out-of-distribution
 python examples/tracking.py --replay docs/data/osorno-yolo11n.json   # belief labels for saved YOLO tracks
 python examples/tracking.py your.mp4      # live YOLO + ByteTrack (pip install ultralytics, AGPL-3.0)
+python examples/multi_agent.py            # LLM agents triage an outage (scripted replies, no model)
+python examples/multi_agent.py --local Qwen/Qwen2.5-1.5B-Instruct --temperature 5 --rule cautious
+python examples/multi_agent.py --replay docs/data/multi-agent-qwen2.5-1.5b.json --temperature 5 --rule cautious
+python examples/multi_agent.py --live     # Claude agents (pip install anthropic)
 python docs/make_figures.py               # regenerate every figure in docs/figures (needs matplotlib)
 ```
 
-The [visual guide](docs/visual-guide.md) walks through all of it with pictures and runnable snippets.
+The [visual guide](https://github.com/sulcantonin/torchbelief/blob/main/docs/visual-guide.md) walks through all of it with pictures and runnable snippets.
 
 ## Complexity and limits
 
@@ -212,7 +249,7 @@ The [visual guide](docs/visual-guide.md) walks through all of it with pictures a
 
 ## Roadmap
 
-- learned compression of sparse combinations and box embeddings of focal sets (see [NOTES.md](NOTES.md))
+- learned compression of sparse combinations and box embeddings of focal sets (see [NOTES.md](https://github.com/sulcantonin/torchbelief/blob/main/NOTES.md))
 - exact multi-source consistency and natural extension via a differentiable LP layer
 - conditioning / Bayes-like updating of capacities (Dempster, geometric, generalized Bayes)
 - continuous frames beyond intervals (random closed sets in ℝᵈ)
@@ -220,7 +257,7 @@ The [visual guide](docs/visual-guide.md) walks through all of it with pictures a
 ## Tests
 
 ```bash
-pytest -q        # 41 tests: brute-force checks of every rule, roundtrips, gradients, layers
+pytest -q        # 42 tests: brute-force checks of every rule, roundtrips, gradients, layers
 ```
 
 ## References
@@ -232,6 +269,12 @@ Frank 1982 (discrete sandwich theorem) · Hunter & Konieczny 2010 (Shapley incon
 Belnap 1977 · Ferson et al. 2003 (p-boxes) · Lowrance, Garvey & Strat 1986 (summarization) ·
 Sensoy, Kaplan & Kandemir 2018 (evidential deep learning) · Jousselme et al. 2001.
 
+## Citing
+
+If you use torchbelief in research, please cite it. GitHub's "Cite this repository" button
+gives APA and BibTeX from [`CITATION.cff`](https://github.com/sulcantonin/torchbelief/blob/main/CITATION.cff);
+each release is archived on Zenodo with its own DOI.
+
 ## License
 
-MIT © Antonin Sulc
+MIT © Antonin Sulc. Changes are listed in the [changelog](https://github.com/sulcantonin/torchbelief/blob/main/CHANGELOG.md).

@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "torchbelief: differentiable belief functions and imprecise probabilities for PyTorch"
+abstract: >-
+  A PyTorch library for belief functions and imprecise probabilities. It fuses sources that
+  disagree, finds out which one is wrong, and decides or abstains when the evidence does not
+  single out an answer. Every operation is a batched, differentiable PyTorch op.
+authors:
+  - family-names: Sulc
+    given-names: Antonin
+version: 0.2.0
+license: MIT
+repository-code: "https://github.com/sulcantonin/torchbelief"
+keywords:
+  - belief functions
+  - Dempster-Shafer theory
+  - imprecise probability
+  - uncertainty
+  - sensor fusion
+  - PyTorch
