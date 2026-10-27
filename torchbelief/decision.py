@@ -58,6 +58,26 @@ def decide(m: torch.Tensor, util: torch.Tensor, frame: Frame, criterion: str = "
     return score.argmax(-1)
 
 
+# ---- set-valued decisions (0-1 utilities) -------------------------------------
+
+def strong_dominance(m: torch.Tensor, frame: Frame, tol: float = 1e-9) -> torch.Tensor:
+    """Interval dominance on singletons, bool (..., n): ω is kept unless some ω' has
+    Bel({ω'}) > Pl({ω}). The kept set is never empty; for general utilities see
+    :func:`torchbelief.choice.interval_dominance_acts`."""
+    bel, pl = interval(m, frame)
+    return ~(bel.unsqueeze(-2) > pl.unsqueeze(-1) + tol).any(-1)
+
+
+def weak_dominance(m: torch.Tensor, frame: Frame, tol: float = 1e-9) -> torch.Tensor:
+    """Pareto dominance on (Bel, Pl) of singletons, bool (..., n): ω is dropped if some
+    ω' has Bel and Pl both ≥ and one of them >. Keeps a subset of :func:`strong_dominance`."""
+    bel, pl = interval(m, frame)
+    b_j, b_k = bel.unsqueeze(-2), bel.unsqueeze(-1)                # [..., k, j]
+    p_j, p_k = pl.unsqueeze(-2), pl.unsqueeze(-1)
+    beats = (b_j >= b_k - tol) & (p_j >= p_k - tol) & ((b_j > b_k + tol) | (p_j > p_k + tol))
+    return ~beats.any(-1)
+
+
 # ---- uncertainty measures -------------------------------------------------
 
 def nonspecificity(m: torch.Tensor, frame: Frame) -> torch.Tensor:

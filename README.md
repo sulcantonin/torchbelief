@@ -124,6 +124,7 @@ Möbius, zeta and commonality transforms are the fast O(n·2ⁿ) ones, applied a
 |---|---|---|
 | `Frame(n, names)` | frame of discernment, n ≤ 16 | `subset([...])`, `elements(mask)`, membership/cardinality tables |
 | mass tensors | `(..., 2**n)` Möbius masses | `vacuous`, `categorical`, `simple_support`, `from_probabilities`, `from_dirichlet`, `negation`, `random_mass`, `is_valid` |
+| conversions | fast O(n·2ⁿ) zeta/Möbius transforms | `belief`, `plausibility`, `commonality`, `implicability` and their inverses `mass_from_*`; canonical decompositions `conjunctive_weights` / `disjunctive_weights` and `from_*` |
 | `Capacity` | any monotone lower set function | `from_mass / from_probability / from_possibility / from_credal`, `.upper`, `.dual()`, `.mass()`, `.commonality()`, `.contour()`, `.pignistic()`, `.credal_vertices()`, `.choquet(f)`, `.expectation_bounds(U)`, `.discount(α)` |
 | structure checks | what kind of capacity is this? | `is_belief`, `is_probability`, `is_possibility`, `monotonicity_violation`, `convexity_violation` (2-monotonicity) |
 | `possibility` | π distributions | t-norm conjunctive rules (min, product, Łukasiewicz), disjunctive, Dubois–Prade **adaptive** rule, Yager-style rule, discounting, consistency h |
@@ -152,9 +153,22 @@ folds any of them over many sources. The rules differ mainly in what they do wit
 | `disjunctive` | no conflict, A ∪ B | ✓ | | at least one source is right, unknown which |
 | `average`, `murphy` | averaged, then Dempster (Murphy) | | | quick robust baseline |
 
-Reliability: `discount(m, α)` (Shafer) and `contextual_discount(m, β)` (Mercier–Quost–Denœux:
-per-class reliability, e.g. "this sensor is good at cars but bad at bikes"). The canonical
-decomposition is exposed as `conjunctive_weights` / `from_conjunctive_weights`.
+`decombine_conjunctive` / `decombine_disjunctive` remove a source from a combination, and
+`condition(m, A)` / `decondition(m, A)` are Dempster conditioning and its least committed inverse.
+
+### Corrections: unreliable or untruthful sources
+
+`torchbelief.corrections` corrects a source with degrees `β (..., L)`, one per *context* (a subset
+of Θ). Every correction is batched and differentiable in `β`, so the degrees can be learned.
+
+| Correction | The source, with probability 1−β… | Default contexts | Contour pl′({ω_k}) |
+|---|---|---|---|
+| `discount(m, α)`, `contextual_discount(m, β)` | is irrelevant (Mercier–Quost–Denœux; a partition of Θ gives Θ-contextual discounting) | {ω_k} | 1 − β_k(1 − pl) |
+| `reinforce(m, β)`, `contextual_reinforce(m, β)` | is a positive liar in the context | Θ∖{ω_k} | β_k·pl |
+| `negate(m, β)`, `contextual_negate(m, β)` | says the contrary of what it knows in the context | Θ∖{ω_k} | ½ + (pl − ½)(2β_k − 1) |
+| `contextual_dediscount`, `contextual_dereinforce` | undo an earlier correction | as above | |
+
+Contextual discounting is how you say "this sensor is good at cars but bad at bikes".
 
 ### Inconsistency: detect, measure, blame, resolve
 
@@ -188,7 +202,7 @@ Utilities are a matrix `U (acts, n)`; `-1` means abstain.
 | | |
 |---|---|
 | `choice` (any capacity) | `maximin` (Γ-maximin), `maximax`, `hurwicz(α)`, `pignistic_choice`, Walley `maximal_acts`, `interval_dominance_acts`, `e_admissible_acts`, **`decide_or_abstain(rule)`** |
-| `decision` (masses) | `pignistic`, `plausibility_transform`, `interval` (Bel, Pl of singletons), `vacuity`, `expected_utility_bounds`, `decide(criterion)` |
+| `decision` (masses) | `pignistic`, `plausibility_transform`, `interval` (Bel, Pl of singletons), `vacuity`, `expected_utility_bounds`, `decide(criterion)`, set-valued `strong_dominance` / `weak_dominance` (bool mask of kept elements) |
 | uncertainty measures | `nonspecificity`, `deng_entropy`, `pignistic_entropy`, `ambiguity_measure` (Jiroušek–Shenoy), `jousselme_distance`, `conflict_weight` |
 
 ### Neural layers and losses
@@ -257,14 +271,16 @@ The [visual guide](https://github.com/sulcantonin/torchbelief/blob/main/docs/vis
 ## Tests
 
 ```bash
-pytest -q        # 42 tests: brute-force checks of every rule, roundtrips, gradients, layers
+pytest -q        # brute-force checks of every rule, roundtrips, gradients, layers
+pip install evtools-dst && pytest -q tests/test_evtools_crosscheck.py   # agreement with evtools
 ```
 
 ## References
 
 Shafer 1976 · Smets & Kennes 1994 (TBM) · Yager 1987 · Dubois & Prade 1988 · Murphy 2000 ·
 Smarandache & Dezert 2005 (PCR5) · Martin & Osswald 2006 (PCR6) · Denœux 2000 (ENN), 2008 (cautious/bold) ·
-Mercier, Quost & Denœux 2008 (contextual discounting) · Walley 1991 · Troffaes 2007 (decision rules) ·
+Mercier, Quost & Denœux 2008 (contextual discounting) · Pichon, Mercier, Lefèvre & Delmotte 2016
+(contextual corrections) · Smets 2002 (conditioning, decombination) · Walley 1991 · Troffaes 2007 (decision rules) ·
 Frank 1982 (discrete sandwich theorem) · Hunter & Konieczny 2010 (Shapley inconsistency values) ·
 Belnap 1977 · Ferson et al. 2003 (p-boxes) · Lowrance, Garvey & Strat 1986 (summarization) ·
 Sensoy, Kaplan & Kandemir 2018 (evidential deep learning) · Jousselme et al. 2001.

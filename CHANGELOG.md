@@ -7,6 +7,24 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- Conversions: `implicability`, `mass_from_implicability`, `mass_from_plausibility`, and the
+  disjunctive canonical decomposition `disjunctive_weights` / `from_disjunctive_weights`.
+- `decombine_conjunctive` and `decombine_disjunctive`; Dempster `condition` and `decondition`.
+- `corrections` module: `reinforce`, `negate`, and the contextual `contextual_reinforce`,
+  `contextual_negate`, `contextual_dediscount` and `contextual_dereinforce` (Pichon et al. 2016),
+  all differentiable in the correction degrees.
+- `strong_dominance` and `weak_dominance`: set-valued decisions on a mass.
+- `tests/test_evtools_crosscheck.py` checks these and the existing rules against
+  [evtools](https://github.com/evtools-team/evtools) when `evtools-dst` is installed.
+
+### Changed
+
+- `contextual_discount` takes optional `contexts` (subset bitmasks); a partition of Θ gives
+  Θ-contextual discounting. `discount` and `contextual_discount` moved to `corrections` and are
+  still importable from `combine`.
+
 ## [0.2.0] - unreleased
 
 First public release.

@@ -71,11 +71,27 @@ def commonality(m: torch.Tensor, frame: Frame) -> torch.Tensor:
     return superset_sum(m, frame)
 
 
+def implicability(m: torch.Tensor, frame: Frame) -> torch.Tensor:
+    """b(A) = Σ_{B ⊆ A} m(B) = Bel(A) + m(∅): the disjunctive counterpart of q
+    (b of a disjunctive combination is the product of the b's)."""
+    return subset_sum(m, frame)
+
+
 def mass_from_belief(bel: torch.Tensor, frame: Frame) -> torch.Tensor:
     """Inverse of :func:`belief` for a normalised mass (m(∅)=0)."""
     b = bel.clone()
     b[..., 0] = 0
     return subset_sum_inverse(b, frame)
+
+
+def mass_from_implicability(b: torch.Tensor, frame: Frame) -> torch.Tensor:
+    return subset_sum_inverse(b, frame)
+
+
+def mass_from_plausibility(pl: torch.Tensor, frame: Frame) -> torch.Tensor:
+    """Inverse of :func:`plausibility` for a mass of total 1: b(A) = 1 − Pl(Ā), so
+    m(∅) = 1 − Pl(Θ) (a subnormal mass is recovered as such)."""
+    return subset_sum_inverse(1 - pl.flip(-1), frame)
 
 
 def mass_from_commonality(q: torch.Tensor, frame: Frame) -> torch.Tensor:

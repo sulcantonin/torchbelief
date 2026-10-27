@@ -12,7 +12,10 @@ return ``(m, conflict)`` where ``conflict`` has shape ``(...,)``.
 - ``pcr5`` / ``pcr6``: partial conflict sent back to its sources proportionally
 - ``cautious`` / ``bold`` : idempotent rules for non-distinct sources (Denœux)
 - ``average`` / ``murphy`` : weighted mean / mean combined with itself
-- ``discount`` / ``contextual_discount`` : reliability, global or per class
+- ``decombine_*`` : inverses of the conjunctive / disjunctive rules
+- ``condition`` / ``decondition`` : Dempster conditioning and its least committed inverse
+- ``discount`` / ``contextual_discount`` : reliability, global or per context
+  (reinforcement and negating are in :mod:`torchbelief.corrections`)
 """
 
 from typing import Callable, Dict, Optional, Sequence, Tuple
@@ -21,6 +24,7 @@ import torch
 
 from .frame import Frame
 from . import transforms as T
+from .corrections import contextual_discount, discount  # noqa: F401  (re-exported)
 
 
 def _tables(frame: Frame, device):
@@ -162,6 +166,54 @@ def from_conjunctive_weights(log_w: torch.Tensor, frame: Frame) -> torch.Tensor:
     return T.superset_sum_inverse(log_q.exp(), frame)
 
 
+def disjunctive_weights(m: torch.Tensor, frame: Frame, eps: float = 1e-12) -> torch.Tensor:
+    """log v(A) of the canonical disjunctive decomposition (Denœux 2008), the dual of
+    :func:`conjunctive_weights` through negation: v(A) = w̄(Ā) with m̄(A) = m(Ā).
+    Requires a subnormal mass (m(∅) > 0); the ∅ entry is meaningless and set to 0."""
+    return conjunctive_weights(m.flip(-1), frame, eps).flip(-1)
+
+
+def from_disjunctive_weights(log_v: torch.Tensor, frame: Frame) -> torch.Tensor:
+    """Inverse of :func:`disjunctive_weights`."""
+    return from_conjunctive_weights(log_v.flip(-1), frame).flip(-1)
+
+
+# ---- decombination and conditioning ----------------------------------------------
+
+def decombine_conjunctive(m12: torch.Tensor, m2: torch.Tensor, frame: Frame, eps: float = 1e-12
+                          ) -> torch.Tensor:
+    """Remove m2 from a conjunctive combination: q = q12 / q2 (Smets' decombination).
+    m2 must be non-dogmatic (m2(Θ) > 0). The result is a valid mass only if m12 really
+    contains m2; check it with :func:`torchbelief.is_valid`."""
+    q = T.superset_sum(m12, frame) / T.superset_sum(m2, frame).clamp_min(eps)
+    return T.superset_sum_inverse(q, frame)
+
+
+def decombine_disjunctive(m12: torch.Tensor, m2: torch.Tensor, frame: Frame, eps: float = 1e-12
+                          ) -> torch.Tensor:
+    """Remove m2 from a disjunctive combination: b = b12 / b2. m2 must be subnormal
+    (m2(∅) > 0). As for :func:`decombine_conjunctive`, the result may be invalid."""
+    b = T.subset_sum(m12, frame) / T.subset_sum(m2, frame).clamp_min(eps)
+    return T.subset_sum_inverse(b, frame)
+
+
+def condition(m: torch.Tensor, event: int, frame: Frame, normalise: bool = True
+              ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Dempster conditioning on the event A: m[A](B) = Σ_{C∩A=B} m(C), i.e. the conjunctive
+    combination with the categorical mass on A. Returns ``(m[A], κ)`` with κ = mass of the
+    focal sets disjoint from A; ``normalise=False`` keeps κ on ∅ (TBM conditioning)."""
+    idx = torch.arange(frame.size, device=m.device) & event
+    out = torch.zeros_like(m).scatter_add(-1, idx.expand_as(m), m)
+    return _normalise(out) if normalise else (out, out[..., 0])
+
+
+def decondition(m: torch.Tensor, event: int, frame: Frame) -> torch.Tensor:
+    """Least committed mass whose conditioning on A gives m: m*(B ∪ Ā) = m(B)
+    (Smets' ballooning extension)."""
+    idx = torch.arange(frame.size, device=m.device) | (frame.theta ^ event)
+    return torch.zeros_like(m).scatter_add(-1, idx.expand_as(m), m)
+
+
 def _normalise(m: torch.Tensor, eps: float = 1e-8):
     k = m[..., 0]
     return torch.cat([torch.zeros_like(m[..., :1]),
@@ -183,21 +235,6 @@ def bold(m1, m2, frame: Frame, eps: float = 1e-12) -> Tuple[torch.Tensor, torch.
     (min of disjunctive weights). Sources must be subnormal (m(∅) > 0)."""
     m, _ = cautious(m1.flip(-1), m2.flip(-1), frame, normalise=False, eps=eps)
     return m.flip(-1), torch.zeros_like(m[..., 0])
-
-
-# ---- contextual discounting ----------------------------------------------------
-
-def contextual_discount(m: torch.Tensor, beta: torch.Tensor, frame: Frame) -> torch.Tensor:
-    """Mercier–Quost–Denœux contextual discounting. ``beta`` (..., n) is the source's
-    reliability *given* the true class is ω_k (1 = trusted, 0 = ignored).
-
-    m' = m ∪ (∪_k m_k) with m_k(∅)=β_k, m_k({ω_k})=1−β_k, which gives
-    pl'({ω_k}) = 1 − β_k + β_k·pl({ω_k}). (Equal β_k is *not* Shafer discounting;
-    use :func:`discount` for that.)"""
-    mem = frame.membership(m)                                       # [N, n]
-    b = beta.to(m.dtype).unsqueeze(-2)                              # (..., 1, n)
-    m_ctx = (mem * (1 - b) + (1 - mem) * b).prod(-1)               # (..., N)
-    return disjunctive(m, m_ctx, frame)
 
 
 RULES: Dict[str, Callable] = {
@@ -233,12 +270,3 @@ def combine(masses: Sequence[torch.Tensor], frame: Frame, rule: str = "yager"
         acc, k = fn(acc, m, frame)
         total = total + k
     return acc, total
-
-
-def discount(m: torch.Tensor, alpha, frame: Frame) -> torch.Tensor:
-    """Shafer discounting: m' = α·m + (1-α)·δ_Θ (α = source reliability)."""
-    a = torch.as_tensor(alpha, dtype=m.dtype, device=m.device)
-    if a.dim() > 0:
-        a = a.unsqueeze(-1)
-    out = a * m
-    return torch.cat([out[..., :-1], out[..., -1:] + (1 - a)], dim=-1)
