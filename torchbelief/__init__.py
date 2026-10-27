@@ -14,14 +14,17 @@ from .combine import (conjunctive, disjunctive, dempster, yager, dubois_prade, p
 from .corrections import (discount, contextual_discount, contextual_dediscount, reinforce,
                           contextual_reinforce, contextual_dereinforce, negate, contextual_negate)
 from .decision import (pignistic, plausibility_transform, interval, vacuity,
-                       expected_utility_bounds, decide, strong_dominance, weak_dominance,
-                       nonspecificity, deng_entropy, pignistic_entropy, ambiguity_measure,
-                       jousselme_distance, conflict_weight)
+                       expected_utility_bounds, decision_scores, decide, soft_decide,
+                       strong_dominance, weak_dominance, max_mass_set, soft_dominance, nonspecificity,
+                       deng_entropy, pignistic_entropy, ambiguity_measure, jousselme_distance,
+                       conflict_weight)
 from .capacity import Capacity, choquet
 from .continuous import RandomInterval
 from .sparse import SparseMass
-from . import possibility, inconsistency, choice, belnap
-from .layers import (MassHead, EvidentialHead, PrototypeHead, pignistic_nll, belief_nll, plausibility_nll,
-                     hurwicz_nll, nonspecificity_penalty)
+from . import possibility, inconsistency, choice, belnap, metrics
+from .layers import (MassHead, EvidentialHead, PrototypeHead, EkNNHead, pignistic_nll, belief_nll,
+                     plausibility_nll, hurwicz_nll, nonspecificity_penalty, pl_loss,
+                     expected_utility_loss)
+from .learning import ContextualCorrection, fit_contextual, hard_to_soft_labels
 
 __version__ = "0.2.0"

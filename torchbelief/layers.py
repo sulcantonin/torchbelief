@@ -80,16 +80,59 @@ class PrototypeHead(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         d2 = torch.cdist(x, self.prototypes.to(x.dtype)).pow(2)          # (..., K)
         s = torch.sigmoid(self.alpha_logit) * torch.exp(-self.gamma.pow(2) * d2)
-        u = self.beta.softmax(-1)                                          # (K, n)
-        # log commonalities: q_i({ω_k}) = 1 − s_i + s_i·u_ik, q_i(Θ) = 1 − s_i
-        log_q_theta = torch.log1p(-s.clamp(max=1 - 1e-6)).sum(-1, keepdim=True)
-        log_q = torch.log1p(-s.unsqueeze(-1) * (1 - u)).sum(-2)           # (..., n)
-        q_theta = log_q_theta.exp()
-        m_single = log_q.exp() - q_theta                                    # unnormalised
-        m = torch.cat([m_single, q_theta], -1)
-        m = m / m.sum(-1, keepdim=True)                                     # Dempster normalisation
-        out = torch.zeros(*m.shape[:-1], self.frame.size, dtype=m.dtype, device=m.device)
-        return out.index_copy(-1, self.focal, m)
+        return _fuse_supports(s, self.beta.softmax(-1), self.frame, self.focal)
+
+
+def _fuse_supports(s: torch.Tensor, u: torch.Tensor, frame: Frame, focal: torch.Tensor) -> torch.Tensor:
+    """Dempster fusion of K pieces of evidence m_i({ω_k}) = s_i·u_ik, m_i(Θ) = 1 − s_i in
+    closed form: commonalities multiply. s (..., K), u (..., K, n) → dense mass (..., 2**n)."""
+    # log commonalities: q_i({ω_k}) = 1 − s_i + s_i·u_ik, q_i(Θ) = 1 − s_i
+    log_q_theta = torch.log1p(-s.clamp(max=1 - 1e-6)).sum(-1, keepdim=True)
+    log_q = torch.log1p(-s.unsqueeze(-1) * (1 - u)).sum(-2)               # (..., n)
+    q_theta = log_q_theta.exp()
+    m_single = log_q.exp() - q_theta                                        # unnormalised
+    m = torch.cat([m_single, q_theta], -1)
+    m = m / m.sum(-1, keepdim=True)                                         # Dempster normalisation
+    out = torch.zeros(*m.shape[:-1], frame.size, dtype=m.dtype, device=m.device)
+    return out.index_copy(-1, focal, m)
+
+
+class EkNNHead(nn.Module):
+    """Denœux's evidential k-nearest neighbours (EkNN, 1995) over a stored training set.
+
+    Each of the k nearest training points x_i (class c_i) gives m_i({c_i}) = s_i,
+    m_i(Θ) = 1 − s_i with s_i = α·exp(−γ_{c_i}²‖x − x_i‖²); the k pieces are fused with
+    Dempster's rule. γ (one per class) is learned; α is fixed as in the original method.
+    To train on the stored set, pass ``self_index`` so each point is not its own neighbour.
+    """
+
+    def __init__(self, frame: Frame, x_train: torch.Tensor, y_train: torch.Tensor, k: int = 5,
+                 alpha: float = 0.95):
+        super().__init__()
+        self.frame, self.k, self.alpha = frame, k, alpha
+        self.register_buffer("x_train", x_train)
+        self.register_buffer("y_train", y_train.long())
+        # Denœux's initialisation: γ_q = 1/sqrt(mean distance between points of class q)
+        gamma = torch.ones(frame.n, dtype=x_train.dtype)
+        for q in range(frame.n):
+            xq = x_train[self.y_train == q]
+            if len(xq) > 1:
+                d = torch.pdist(xq).mean()
+                if d > 0:
+                    gamma[q] = d.rsqrt()
+        self.gamma = nn.Parameter(gamma)
+        focal = frame.singletons() + [frame.theta]
+        self.register_buffer("focal", torch.tensor(focal, dtype=torch.long))
+
+    def forward(self, x: torch.Tensor, self_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+        d2 = torch.cdist(x, self.x_train.to(x.dtype)).pow(2)              # (B, N)
+        if self_index is not None:
+            d2 = d2.scatter(-1, self_index.unsqueeze(-1), float("inf"))
+        d2, idx = d2.topk(self.k, dim=-1, largest=False)                   # (B, k)
+        c = self.y_train[idx]
+        s = self.alpha * torch.exp(-self.gamma[c].pow(2) * d2)
+        u = nn.functional.one_hot(c, self.frame.n).to(s.dtype)
+        return _fuse_supports(s, u, self.frame, self.focal)
 
 
 def _singleton(f: torch.Tensor, target: torch.Tensor, frame: Frame) -> torch.Tensor:
@@ -125,3 +168,24 @@ def pignistic_nll(m: torch.Tensor, target: torch.Tensor, frame: Frame, eps: floa
     """Cross-entropy of the pignistic probability against class indices."""
     p = pignistic(m, frame)
     return -p.gather(-1, target.unsqueeze(-1)).clamp_min(eps).log().mean()
+
+
+def pl_loss(m: torch.Tensor, target: torch.Tensor, frame: Frame) -> torch.Tensor:
+    """Denœux's E_pl: mean Σ_k (Pl({ω_k}) − δ_k)². ``target`` is class indices, or soft
+    labels given as masses (..., 2**n), whose contour Pl({ω_k}) replaces δ_k."""
+    pl = T.plausibility(m, frame)[..., frame.singletons()]
+    if target.is_floating_point():
+        delta = T.plausibility(target, frame)[..., frame.singletons()]
+    else:
+        delta = nn.functional.one_hot(target, frame.n).to(pl.dtype)
+    return (pl - delta).pow(2).sum(-1).mean()
+
+
+def expected_utility_loss(m: torch.Tensor, target: torch.Tensor, frame: Frame, a: float = 1.6,
+                          b: float = 0.6) -> torch.Tensor:
+    """−Σ_A m(A)·u(A, y) with u the utility-discounted accuracy of predicting the set A
+    (a=1.6, b=0.6 is u65; a=2.2, b=1.2 is u80). Linear in m, so a head trained on it puts
+    its mass on the set prediction that maximises the expected u65/u80."""
+    card = frame.cardinality(m).clamp_min(1)
+    hit = frame.membership(m).T[target]                                    # (..., 2**n)
+    return -(m * hit * (a / card - b / card.pow(2))).sum(-1).mean()

@@ -202,7 +202,9 @@ Utilities are a matrix `U (acts, n)`; `-1` means abstain.
 | | |
 |---|---|
 | `choice` (any capacity) | `maximin` (Γ-maximin), `maximax`, `hurwicz(α)`, `pignistic_choice`, Walley `maximal_acts`, `interval_dominance_acts`, `e_admissible_acts`, **`decide_or_abstain(rule)`** |
-| `decision` (masses) | `pignistic`, `plausibility_transform`, `interval` (Bel, Pl of singletons), `vacuity`, `expected_utility_bounds`, `decide(criterion)`, set-valued `strong_dominance` / `weak_dominance` (bool mask of kept elements) |
+| `decision` (masses) | `pignistic`, `plausibility_transform`, `interval` (Bel, Pl of singletons), `vacuity`, `expected_utility_bounds`, `decision_scores` and `decide(criterion)` (pignistic, plausibility, maximin, maximax, Hurwicz), differentiable `soft_decide(temperature)` |
+| set-valued (masses) | bool masks `(..., n)`: `strong_dominance`, `weak_dominance`, `max_mass_set`, and the differentiable `soft_dominance(temperature)` |
+| `metrics` | `discounted_accuracy`, `u65`, `u80`, `utility_score(a, b)` of set predictions; `error_rejection_curve` and `auerc` for selective prediction |
 | uncertainty measures | `nonspecificity`, `deng_entropy`, `pignistic_entropy`, `ambiguity_measure` (Jiroušek–Shenoy), `jousselme_distance`, `conflict_weight` |
 
 ### Neural layers and losses
@@ -212,9 +214,13 @@ Utilities are a matrix `U (acts, n)`; `-1` means abstain.
 | `MassHead(d, F, focal)` | softmax over chosen focal sets | singletons + Θ, `"all"`, or an explicit list |
 | `EvidentialHead(d, F)` | Dirichlet α → subjective-logic mass | evidential deep learning (Sensoy et al.) |
 | `PrototypeHead(d, F, k)` | Denœux's **ENN**: distance-based evidence from k prototypes, fused by Dempster in closed form | m(Θ) → 1 away from the training data |
+| `EkNNHead(F, X, y, k)` | Denœux's **evidential k-NN** over a stored training set; γ per class is learned | pass `self_index` to train on the stored set |
+| `ContextualCorrection(F, kind)` | a learnable `discount` / `reinforce` / `negate` correction of any mass, optionally one β per group | initialise with the closed-form `fit_contextual` |
 
 Losses: `pignistic_nll`, `belief_nll` (−log Bel{y}), `plausibility_nll` (−log Pl{y}),
-`hurwicz_nll(λ)` interpolating the two, and `nonspecificity_penalty`.
+`hurwicz_nll(λ)` interpolating the two, `nonspecificity_penalty`, Denœux's `pl_loss` (E_pl, hard
+or soft labels), and `expected_utility_loss(a, b)`, which trains a head for u65/u80 set
+predictions directly. `hard_to_soft_labels` simulates imprecise labels.
 
 From [`examples/evidential_classifier.py`](https://github.com/sulcantonin/torchbelief/blob/main/examples/evidential_classifier.py), probing far from the training blobs:
 
@@ -231,6 +237,7 @@ The Dirichlet head extrapolates evidence linearly, just as a softmax does. The p
 ```bash
 python examples/sensor_fusion.py          # measures, blame, 5 rules × raw/discounted, Belnap table
 python examples/evidential_classifier.py  # Dirichlet head vs ENN, in- and out-of-distribution
+python examples/learned_correction.py     # after a shift: learned contextual discounting vs a u80-trained head
 python examples/tracking.py --replay docs/data/osorno-yolo11n.json   # belief labels for saved YOLO tracks
 python examples/tracking.py your.mp4      # live YOLO + ByteTrack (pip install ultralytics, AGPL-3.0)
 python examples/multi_agent.py            # LLM agents triage an outage (scripted replies, no model)
@@ -280,7 +287,8 @@ pip install evtools-dst && pytest -q tests/test_evtools_crosscheck.py   # agreem
 Shafer 1976 · Smets & Kennes 1994 (TBM) · Yager 1987 · Dubois & Prade 1988 · Murphy 2000 ·
 Smarandache & Dezert 2005 (PCR5) · Martin & Osswald 2006 (PCR6) · Denœux 2000 (ENN), 2008 (cautious/bold) ·
 Mercier, Quost & Denœux 2008 (contextual discounting) · Pichon, Mercier, Lefèvre & Delmotte 2016
-(contextual corrections) · Smets 2002 (conditioning, decombination) · Walley 1991 · Troffaes 2007 (decision rules) ·
+(contextual corrections) · Smets 2002 (conditioning, decombination) · Denœux 1995 (EkNN) ·
+Zaffalon, Corani & Mauá 2012 (u65/u80) · Mutmainah 2021 (soft labels) · Walley 1991 · Troffaes 2007 (decision rules) ·
 Frank 1982 (discrete sandwich theorem) · Hunter & Konieczny 2010 (Shapley inconsistency values) ·
 Belnap 1977 · Ferson et al. 2003 (p-boxes) · Lowrance, Garvey & Strat 1986 (summarization) ·
 Sensoy, Kaplan & Kandemir 2018 (evidential deep learning) · Jousselme et al. 2001.

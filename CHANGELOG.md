@@ -16,6 +16,14 @@ between minor versions.
   `contextual_negate`, `contextual_dediscount` and `contextual_dereinforce` (Pichon et al. 2016),
   all differentiable in the correction degrees.
 - `strong_dominance` and `weak_dominance`: set-valued decisions on a mass.
+- `metrics` module: `discounted_accuracy`, `u65`, `u80`, `utility_score`,
+  `error_rejection_curve` and `auerc`.
+- `decision_scores`, `soft_decide`, `soft_dominance` and `max_mass_set`.
+- Losses `pl_loss` (Denœux's E_pl, hard or soft labels) and `expected_utility_loss` (u65/u80).
+- `EkNNHead`: evidential k-nearest neighbours with learned per-class γ.
+- `learning` module: `ContextualCorrection` (learnable contextual discounting, reinforcement
+  or negating, optionally per group), closed-form `fit_contextual`, and `hard_to_soft_labels`.
+- Example `learned_correction.py`.
 - `tests/test_evtools_crosscheck.py` checks these and the existing rules against
   [evtools](https://github.com/evtools-team/evtools) when `evtools-dst` is installed.
 

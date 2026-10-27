@@ -9,6 +9,8 @@ import torchbelief as tb
 
 ev = pytest.importorskip("evtools")
 from evtools import combinations as C, conversions as V, corrections as R, decision as D  # noqa: E402
+from evtools import learning as L, metrics as M  # noqa: E402
+from evtools.classifiers.eknn import EkNN  # noqa: E402
 from evtools.dsvector import DSVector, Kind  # noqa: E402
 
 F = tb.Frame(4)
@@ -92,3 +94,73 @@ def test_dominance(seed):
     names = lambda keep: frozenset(NAMES[i] for i in range(F.n) if keep[i])
     assert names(tb.strong_dominance(m, F)) == D.strong_dominance(dsv(m))
     assert names(tb.weak_dominance(m, F)) == D.weak_dominance(dsv(m))
+
+
+# ---- metrics, losses, learning, EkNN ---------------------------------------------------
+
+def labelled(B=40):
+    """Random masses with labels and the same data as DSVectors / atom names."""
+    m = tb.random_mass(F, (B,), n_focal=5)
+    y = torch.randint(F.n, (B,), generator=G)
+    return m, y, [dsv(x) for x in m], [NAMES[i] for i in y]
+
+
+def test_set_metrics():
+    pred = torch.rand(50, F.n, generator=G) < 0.5
+    y = torch.randint(F.n, (50,), generator=G)
+    sets = [frozenset(NAMES[i] for i in range(F.n) if p[i]) for p in pred]
+    labels = [NAMES[i] for i in y]
+    for ours, ref in ((tb.metrics.discounted_accuracy, M.mean_discounted_accuracy),
+                      (tb.metrics.u65, M.mean_u65), (tb.metrics.u80, M.mean_u80)):
+        assert ours(pred, y).item() == pytest.approx(ref(sets, labels))
+
+
+def test_pl_loss_hard_and_soft():
+    m, y, ms, ys = labelled()
+    assert tb.pl_loss(m, y, F).item() == pytest.approx(M.mean_pl_loss(ms, ys))
+    soft = full_mass((40,))
+    assert tb.pl_loss(m, soft, F).item() == pytest.approx(M.mean_pl_loss(ms, [dsv(s) for s in soft]))
+
+
+def test_error_rejection_curve():
+    m, y, ms, ys = labelled(60)
+    conf, pred = tb.plausibility_transform(m, F).max(-1)
+    rates, errors = tb.metrics.error_rejection_curve(conf, pred == y)
+    ref_rates, ref_errors = M.error_rejection_curve(ms, ys, metric="R_plp")
+    close(rates.double(), torch.from_numpy(ref_rates))
+    close(errors.double(), torch.from_numpy(ref_errors))
+    assert tb.metrics.auerc(conf, pred == y).item() == pytest.approx(M.auerc(ms, ys, metric="R_plp"))
+
+
+@pytest.mark.parametrize("kind,fit,keys", [("discount", L.fit_cd, "single"),
+                                           ("reinforce", L.fit_cr, "compl"),
+                                           ("negate", L.fit_cn, "compl")])
+def test_fit_contextual(kind, fit, keys):
+    m, y, ms, ys = labelled(80)
+    ctx = F.singletons() if keys == "single" else [F.theta ^ s for s in F.singletons()]
+    for target, labels in ((y, ys), (full_mass((80,)), None)):
+        ref = fit(ms, ys if labels is not None else [dsv(t) for t in target])
+        expect = torch.tensor([ref[fs(c)] for c in ctx], dtype=torch.float64)
+        close(tb.fit_contextual(m, target, F, kind)[0], expect)
+
+
+def test_hard_to_soft_labels_statistics():
+    torch.manual_seed(5)
+    y = torch.randint(F.n, (20000,))
+    ours = tb.hard_to_soft_labels(y, F)
+    ref = L.hard_to_soft_labels([NAMES[i] for i in y], NAMES, rng=np.random.default_rng(5))
+    ref_theta = torch.tensor([r.dense[F.theta] for r in ref])
+    assert (ours[:, F.theta] > 0).float().mean() == pytest.approx((ref_theta > 0).float().mean(), abs=0.02)
+    assert ours[:, F.theta].mean() == pytest.approx(ref_theta.mean().item(), abs=0.02)
+
+
+def test_eknn_head():
+    X = torch.randn(80, 3, generator=G, dtype=torch.float64)
+    y = torch.randint(F.n, (80,), generator=G)
+    q = torch.randn(10, 3, generator=G, dtype=torch.float64)
+    ref = EkNN(k=6, alpha=0.95, optimize=False).fit(X.numpy(), y.numpy())
+    head = tb.EkNNHead(F, X, y, k=6, alpha=0.95)
+    close(head.gamma.detach(), torch.from_numpy(ref.gamma_))       # Denœux's initialisation
+    ref.gamma_ = np.array([0.7, 1.3, 0.4, 2.0])                    # and any other γ
+    head.gamma.data = torch.from_numpy(ref.gamma_.copy())
+    close(head(q), torch.stack([dense(b) for b in ref.predict_bba(q.numpy())]))

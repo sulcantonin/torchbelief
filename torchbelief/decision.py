@@ -47,15 +47,29 @@ def expected_utility_bounds(m: torch.Tensor, util: torch.Tensor, frame: Frame):
     return m @ mn.T, m @ mx.T
 
 
+def decision_scores(m: torch.Tensor, util: torch.Tensor, frame: Frame, criterion: str = "pignistic",
+                    hurwicz: float = 0.5) -> torch.Tensor:
+    """Score of every act (..., acts), differentiable in m. criteria: pignistic |
+    plausibility (expected utility under :func:`plausibility_transform`) | maximin |
+    maximax | hurwicz (hurwicz·upper + (1−hurwicz)·lower)."""
+    if criterion in ("pignistic", "plausibility"):
+        p = pignistic(m, frame) if criterion == "pignistic" else plausibility_transform(m, frame)
+        return p @ util.to(m.dtype).T
+    lo, hi = expected_utility_bounds(m, util, frame)
+    return {"maximin": lo, "maximax": hi, "hurwicz": hurwicz * hi + (1 - hurwicz) * lo}[criterion]
+
+
 def decide(m: torch.Tensor, util: torch.Tensor, frame: Frame, criterion: str = "pignistic",
            hurwicz: float = 0.5) -> torch.Tensor:
-    """Index of the chosen act. criteria: pignistic | maximin | maximax | hurwicz."""
-    if criterion == "pignistic":
-        score = pignistic(m, frame) @ util.to(m.dtype).T
-    else:
-        lo, hi = expected_utility_bounds(m, util, frame)
-        score = {"maximin": lo, "maximax": hi, "hurwicz": hurwicz * hi + (1 - hurwicz) * lo}[criterion]
-    return score.argmax(-1)
+    """Index of the chosen act: argmax of :func:`decision_scores`."""
+    return decision_scores(m, util, frame, criterion, hurwicz).argmax(-1)
+
+
+def soft_decide(m: torch.Tensor, util: torch.Tensor, frame: Frame, criterion: str = "pignistic",
+                hurwicz: float = 0.5, temperature: float = 1.0) -> torch.Tensor:
+    """Softmax of :func:`decision_scores` / temperature: a differentiable :func:`decide`
+    (→ one-hot as temperature → 0), usable inside a loss."""
+    return (decision_scores(m, util, frame, criterion, hurwicz) / temperature).softmax(-1)
 
 
 # ---- set-valued decisions (0-1 utilities) -------------------------------------
@@ -76,6 +90,22 @@ def weak_dominance(m: torch.Tensor, frame: Frame, tol: float = 1e-9) -> torch.Te
     p_j, p_k = pl.unsqueeze(-2), pl.unsqueeze(-1)
     beats = (b_j >= b_k - tol) & (p_j >= p_k - tol) & ((b_j > b_k + tol) | (p_j > p_k + tol))
     return ~beats.any(-1)
+
+
+def max_mass_set(m: torch.Tensor, frame: Frame) -> torch.Tensor:
+    """The non-empty focal set with the largest mass, as a bool mask (..., n). This is the
+    set prediction a head trained with :func:`torchbelief.expected_utility_loss` optimises;
+    :func:`strong_dominance` is more cautious when mass is spread over several sets."""
+    return frame.membership().to(m.device)[m[..., 1:].argmax(-1) + 1]
+
+
+def soft_dominance(m: torch.Tensor, frame: Frame, temperature: float = 0.05) -> torch.Tensor:
+    """Sigmoid relaxation of :func:`strong_dominance`, (..., n) in (0, 1):
+    σ((Pl({ω}) − max_{ω'≠ω} Bel({ω'})) / temperature). A differentiable set prediction."""
+    bel, pl = interval(m, frame)
+    eye = torch.eye(frame.n, dtype=torch.bool, device=m.device)
+    rival = bel.unsqueeze(-2).masked_fill(eye, float("-inf")).amax(-1)
+    return torch.sigmoid((pl - rival) / temperature)
 
 
 # ---- uncertainty measures -------------------------------------------------
