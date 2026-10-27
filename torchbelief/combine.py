@@ -46,10 +46,14 @@ def disjunctive(m1: torch.Tensor, m2: torch.Tensor, frame: Frame) -> torch.Tenso
 
 def dempster(m1, m2, frame: Frame, eps: float = 1e-8, clamp: bool = True
              ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Dempster's rule. ``clamp=False`` exposes the true 1/(1-κ) blow-up."""
+    """Dempster's rule. ``clamp=False`` exposes the true 1/(1-κ) blow-up.
+
+    The denominator is the sum of the non-empty masses rather than 1 − κ: equal for
+    normalised inputs, but 1 − κ cancels catastrophically under high conflict (in
+    float32 at κ = 1 − 10⁻⁶ it is ~20% off, and its gradient ~40%)."""
     m = conjunctive(m1, m2, frame)
     k = m[..., 0]
-    denom = 1.0 - k
+    denom = m[..., 1:].sum(-1)
     if clamp:
         denom = denom.clamp_min(eps)
     m = torch.cat([torch.zeros_like(m[..., :1]), m[..., 1:] / denom.unsqueeze(-1)], dim=-1)
@@ -217,7 +221,7 @@ def decondition(m: torch.Tensor, event: int, frame: Frame) -> torch.Tensor:
 def _normalise(m: torch.Tensor, eps: float = 1e-8):
     k = m[..., 0]
     return torch.cat([torch.zeros_like(m[..., :1]),
-                      m[..., 1:] / (1 - k).clamp_min(eps).unsqueeze(-1)], -1), k
+                      m[..., 1:] / m[..., 1:].sum(-1, keepdim=True).clamp_min(eps)], -1), k
 
 
 def cautious(m1, m2, frame: Frame, normalise: bool = True, eps: float = 1e-12

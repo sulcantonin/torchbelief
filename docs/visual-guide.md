@@ -15,6 +15,8 @@ build on the setup in section 1.
 [numbers instead of classes](#7-numbers-instead-of-classes-p-boxes) ·
 [seeing contradictions](#8-seeing-contradictions-belnaps-four-values) ·
 [real video](#9-real-video-labels-that-dont-flicker) ·
+[trusting a source only so far](#10-trusting-a-source-only-so-far) ·
+[answering with a set](#11-answering-with-a-set) ·
 [glossary](#glossary)
 
 ---
@@ -91,6 +93,18 @@ m[F.subset(["car", "truck"])] = 0.3     # index 3: "car or truck, can't tell whi
 m[F.theta] = 0.2                        # index 7: "no idea"
 print(F.elements(5))                    # ['car', 'bike']
 print(tb.belief(m, F), tb.plausibility(m, F))   # Bel and Pl of all 8 subsets at once
+```
+
+To read a single mass function, print it as a table:
+
+```python
+from torchbelief import display
+
+print(display.to_string(m, F))     # also display.to_html and display.to_latex
+# set                m     Bel      Pl       Q
+# {car}          0.500   0.500   1.000   1.000  ████████████████
+# {car, truck}   0.300   0.800   1.000   0.500  ██████████
+# Θ              0.200   1.000   1.000   0.200  ██████
 ```
 
 Because the layout is a dense tensor, adding a batch dimension (`m` of shape `(batch, 8)`)
@@ -328,6 +342,101 @@ The clip is [*Rainy City Traffic at Osorno Intersection*](https://www.pexels.com
 by Videas Cl on Pexels (Pexels license). [`make_tracking_demo.py`](make_tracking_demo.py)
 regenerates the detection log, the animation and the thumbnails from it.
 
+## 10. Trusting a source only so far
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/corrections-dark.svg">
+  <img src="figures/corrections-light.svg" alt="Four panels of Bel and Pl intervals for car, truck and bike. As reported, car has Bel 0.6. Discounting for trucks raises Pl of truck from 0.4 to 0.82. Reinforcing for trucks lowers it to 0.12. Negating for bikes raises Pl of bike from 0.2 to 0.62.">
+</picture>
+
+Discounting (section 4) trusts a source less *everywhere*. Real sources fail in specific
+ways: a camera that mistakes trucks for cars at night, a classifier that calls too many things
+trucks, a sensor that reports one class back to front. `torchbelief.corrections` has a
+correction for each, with one degree β per class, where 1 leaves the source alone:
+
+| Correction | With probability 1 − β, the source… | What happens to that class |
+|---|---|---|
+| `contextual_discount` | is unreliable when the truth is this class | it can't be ruled out |
+| `contextual_reinforce` | over-reports this class | it becomes less plausible |
+| `contextual_negate` | says the opposite about this class | support and refutation swap |
+
+```python
+F = tb.Frame(3, names=["car", "truck", "bike"])       # section 1's frame again (section 9 changed it)
+m = torch.zeros(F.size, dtype=torch.float64)          # the source in the picture
+m[F.subset(["car"])], m[F.subset(["car", "truck"])], m[F.theta] = 0.6, 0.2, 0.2
+weak_on_trucks = torch.tensor([1.0, 0.3, 1.0], dtype=torch.float64)
+
+tb.interval(tb.contextual_discount(m, weak_on_trucks, F), F)    # Pl(truck): 0.4 → 0.82
+tb.interval(tb.contextual_reinforce(m, weak_on_trucks, F), F)   # Pl(truck): 0.4 → 0.12
+```
+
+You rarely know β in advance. Learn it from a small labelled calibration set: `fit_contextual`
+solves for it in closed form, and `ContextualCorrection` is an `nn.Module`, so the correction
+can also be trained by gradient descent, on its own or inside a bigger model.
+
+```python
+y_cal = torch.randint(0, 3, (300,))                                    # true classes
+said = torch.where((y_cal == 1) & (torch.rand(300) < 0.5), 0, y_cal)   # half the trucks are called "car"
+m_cal = torch.zeros(300, F.size)
+m_cal[torch.arange(300), 1 << said] = 0.9                              # 90 % sure of what it says
+m_cal[:, F.theta] = 0.1
+
+print(tb.fit_contextual(m_cal, y_cal, F))       # ≈ [[1.00, 0.85, 1.00]]: only trucks are a problem
+corr = tb.ContextualCorrection(F, "discount", init=tb.fit_contextual(m_cal, y_cal, F))
+opt = torch.optim.Adam(corr.parameters(), lr=0.05)
+for _ in range(200):
+    loss = tb.pl_loss(corr(m_cal), y_cal, F)    # Denœux's E_pl: squared error of Pl per class
+    opt.zero_grad(); loss.backward(); opt.step()
+```
+
+A corrected source is better *calibrated*: "truck" stays plausible whenever it says "car".
+It does not necessarily *answer* differently, because "car" is still the most likely class
+there. For that, see the next section.
+
+## 11. Answering with a set
+
+Sometimes the honest answer is "car or truck". A set prediction is a bool mask with one entry
+per class, and the usual score is **u65** or **u80**: 1 for the right single class, 0.65
+(or 0.80) for a pair that contains the truth, and 0 if the truth is missing. Naming a pair
+then scores more than flipping a coin between its two classes, which would average 0.5.
+
+There are two ways to get sets:
+
+- **From any mass**, `strong_dominance(m, F)` keeps each class that no other class beats
+  (Bel of a rival above its Pl). This is cautious, and it only widens the answer when the
+  intervals really overlap.
+- **By training for it**, `expected_utility_loss(m, y, F, a, b)` teaches a head to put its mass
+  on the set that maximises the expected u65 or u80, and `max_mass_set(m, F)` reads that set off.
+
+```python
+from torchbelief import metrics
+
+sets = tb.strong_dominance(m_cal, F)                      # bool (300, 3)
+print(metrics.u65(sets, y_cal), metrics.u80(sets, y_cal))   # ≈ 0.81, 0.81: always one class
+
+head = tb.MassHead(F.size, F, focal="all")                # reads the source's mass, one output per subset
+opt = torch.optim.Adam(head.parameters(), lr=0.05)
+for _ in range(300):
+    loss = tb.expected_utility_loss(head(m_cal), y_cal, F, a=2.2, b=1.2)   # train for u80
+    opt.zero_grad(); loss.backward(); opt.step()
+sets = tb.max_mass_set(head(m_cal), F)
+print(metrics.u80(sets, y_cal))                           # ≈ 0.87: answers {car, truck} when told "car"
+```
+
+When the source says "car", one time in three it is really a truck, so under u80 "car or
+truck" (0.80) beats "car" (about 0.67 on average), and the head learns exactly that.
+[`examples/learned_correction.py`](../examples/learned_correction.py) runs the whole story on
+an EkNN classifier after a deployment shift:
+
+| | E_pl ↓ | u65 | u80 | classes per answer |
+|---|---|---|---|---|
+| classifier as is | 0.405 | 0.797 | 0.797 | 1.00 |
+| with learned contextual discounting | 0.359 | 0.797 | 0.797 | 1.00 |
+| with a head trained for u80 | 0.538 | 0.811 | 0.891 | 1.53 |
+
+Discounting improves calibration (lower E_pl) without changing a single answer. The u80 head
+gives up some calibration to answer better.
+
 ---
 
 ## Glossary
@@ -342,6 +451,8 @@ regenerates the detection log, the animation and the thumbnails from it.
 | **pignistic** | the best single probability squeezed out of an interval, for when you must bet |
 | **conflict** κ | mass that ends up on ∅ when combining: how much the sources contradict |
 | **discounting** | trusting a source less: move part of its mass to "don't know" |
+| **correction** | discounting, reinforcement or negating, with a degree β per class |
+| **u65 / u80** | scores for set answers: a correct pair is worth 0.65 / 0.80, a correct single class 1 |
 | **credal set** | the set of all probabilities between Bel and Pl |
 | **abstain** | refuse to pick when no answer is better in every plausible scenario |
 

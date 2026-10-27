@@ -114,7 +114,9 @@ is a constructor that feeds in, and each summary is a view that reads out:
 ```
 
 Möbius, zeta and commonality transforms are the fast O(n·2ⁿ) ones, applied axis by axis on a
-`(2,)*n` reshape. All functions broadcast over leading batch dimensions and are differentiable.
+`(2,)*n` reshape. All functions broadcast over leading batch dimensions and are differentiable,
+and they compile with `torch.compile(fullgraph=True)` (heads, rules, decisions and losses are
+covered by a test).
 
 ## Feature tour
 
@@ -124,6 +126,7 @@ Möbius, zeta and commonality transforms are the fast O(n·2ⁿ) ones, applied a
 |---|---|---|
 | `Frame(n, names)` | frame of discernment, n ≤ 16 | `subset([...])`, `elements(mask)`, membership/cardinality tables |
 | mass tensors | `(..., 2**n)` Möbius masses | `vacuous`, `categorical`, `simple_support`, `from_probabilities`, `from_dirichlet`, `negation`, `random_mass`, `is_valid` |
+| `display` | readable tables of one mass | `to_string` (with bars), `to_html`, `to_latex`: m, Bel, Pl and Q per focal set |
 | conversions | fast O(n·2ⁿ) zeta/Möbius transforms | `belief`, `plausibility`, `commonality`, `implicability` and their inverses `mass_from_*`; canonical decompositions `conjunctive_weights` / `disjunctive_weights` and `from_*` |
 | `Capacity` | any monotone lower set function | `from_mass / from_probability / from_possibility / from_credal`, `.upper`, `.dual()`, `.mass()`, `.commonality()`, `.contour()`, `.pignistic()`, `.credal_vertices()`, `.choquet(f)`, `.expectation_bounds(U)`, `.discount(α)` |
 | structure checks | what kind of capacity is this? | `is_belief`, `is_probability`, `is_possibility`, `monotonicity_violation`, `convexity_violation` (2-monotonicity) |

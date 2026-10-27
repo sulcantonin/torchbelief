@@ -21,10 +21,10 @@ from .decision import (pignistic, plausibility_transform, interval, vacuity,
 from .capacity import Capacity, choquet
 from .continuous import RandomInterval
 from .sparse import SparseMass
-from . import possibility, inconsistency, choice, belnap, metrics
+from . import possibility, inconsistency, choice, belnap, metrics, display
 from .layers import (MassHead, EvidentialHead, PrototypeHead, EkNNHead, pignistic_nll, belief_nll,
                      plausibility_nll, hurwicz_nll, nonspecificity_penalty, pl_loss,
                      expected_utility_loss)
 from .learning import ContextualCorrection, fit_contextual, hard_to_soft_labels
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

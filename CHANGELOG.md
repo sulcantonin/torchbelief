@@ -7,6 +7,8 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
 ### Added
 
 - Conversions: `implicability`, `mass_from_implicability`, `mass_from_plausibility`, and the
@@ -24,6 +26,9 @@ between minor versions.
 - `learning` module: `ContextualCorrection` (learnable contextual discounting, reinforcement
   or negating, optionally per group), closed-form `fit_contextual`, and `hard_to_soft_labels`.
 - Example `learned_correction.py`.
+- `display` module: `to_string`, `to_html` and `to_latex` tables of a mass function.
+- A `torch.compile(fullgraph=True)` test over heads, rules, decisions and losses.
+- Visual guide sections on corrections and set-valued answers, with a new figure.
 - `tests/test_evtools_crosscheck.py` checks these and the existing rules against
   [evtools](https://github.com/evtools-team/evtools) when `evtools-dst` is installed.
 
@@ -33,7 +38,14 @@ between minor versions.
   Θ-contextual discounting. `discount` and `contextual_discount` moved to `corrections` and are
   still importable from `combine`.
 
-## [0.2.0] - unreleased
+### Fixed
+
+- Dempster normalisation (`dempster`, `murphy`, normalised `cautious` and `condition`,
+  `SparseMass.dempster`, `RandomInterval.conjunctive`) and `pignistic` divide by the sum of the
+  non-empty masses instead of 1 − κ. In float32 at κ = 1 − 10⁻⁶ the old result was about 20 %
+  off and its gradient about 40 %; it is now within 10⁻⁶ and 10⁻⁴.
+
+## [0.2.0] - 2026-10-21
 
 First public release.
 
@@ -65,5 +77,6 @@ First public release.
   a base model.
 - A visual guide and figures under `docs/`.
 
-[Unreleased]: https://github.com/sulcantonin/torchbelief/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sulcantonin/torchbelief/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sulcantonin/torchbelief/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sulcantonin/torchbelief/releases/tag/v0.2.0

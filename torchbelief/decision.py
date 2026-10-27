@@ -11,7 +11,7 @@ def pignistic(m: torch.Tensor, frame: Frame) -> torch.Tensor:
     card = frame.cardinality(m).clamp_min(1)
     w = (m / card)  # ∅ has card clamped to 1, but its row of membership is all-False
     p = w @ frame.membership(m)
-    return p / (1 - m[..., :1]).clamp_min(1e-12)
+    return p / p.sum(-1, keepdim=True).clamp_min(1e-12)   # Σ p = 1 − m(∅), without cancellation
 
 
 def plausibility_transform(m: torch.Tensor, frame: Frame) -> torch.Tensor:

@@ -105,7 +105,8 @@ class SparseMass:
         m = self.conjunctive(other)
         k = m.conflict()
         keep = m.focal != 0
-        return SparseMass(m.focal[keep], m.weight[keep] / (1 - k).clamp_min(1e-12), self.n), k
+        w = m.weight[keep]
+        return SparseMass(m.focal[keep], w / w.sum().clamp_min(1e-12), self.n), k
 
     def yager(self, other: "SparseMass") -> Tuple["SparseMass", torch.Tensor]:
         m = self.conjunctive(other)

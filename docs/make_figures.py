@@ -590,9 +590,47 @@ def fig_agents(t):
     return fig
 
 
+# ---- 12. corrections ------------------------------------------------------------------------------
+
+def fig_corrections(t):
+    m = cap_mass(car=0.6, car_truck=0.2, all=0.2)
+    weak = torch.tensor([1.0, 0.3, 1.0], dtype=D)
+    panels = [
+        ("As reported", "car 60 %, car or truck 20 %,\ndon't know 20 %", m),
+        ("Discounted", "unreliable when the truth is truck:\ntruck can't be ruled out", tb.contextual_discount(m, weak, F)),
+        ("Reinforced", "too ready to call things trucks:\ntruck is less plausible", tb.contextual_reinforce(m, weak, F)),
+        ("Negated", "says the opposite about bikes\n70 % of the time",
+         tb.contextual_negate(m, torch.tensor([1.0, 1.0, 0.3], dtype=D), F)),
+    ]
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.3), sharey=True)
+    for ax, (title, sub, mm) in zip(axes, panels):
+        bel, pl = tb.interval(mm, F)
+        for i in range(3):
+            y = 2 - i
+            ax.add_patch(Rectangle((0, y - 0.16), 1, 0.32, color=t["grid"], lw=0))
+            ax.add_patch(Rectangle((0, y - 0.16), float(bel[i]), 0.32, color=t["series"][0], lw=0))
+            ax.add_patch(Rectangle((float(bel[i]), y - 0.16), float(pl[i] - bel[i]), 0.32,
+                                   color=t["band"], lw=0))
+            if mm is not m:                                   # the uncorrected Pl, for comparison
+                ax.plot([float(tb.interval(m, F)[1][i])] * 2, [y - 0.24, y + 0.24], color=t["ink"], lw=1.2)
+        ax.set_xlim(0, 1); ax.set_ylim(-0.6, 2.6)
+        ax.set_yticks([2, 1, 0], CLASSES)
+        ax.set_xticks([0, 0.5, 1], ["0", "0.5", "1"])
+        ax.tick_params(axis="y", length=0)
+        ax.spines["left"].set_visible(False)
+        titled(ax, title, sub, t)
+    handles = [Rectangle((0, 0), 1, 1, color=t["series"][0]), Rectangle((0, 0), 1, 1, color=t["band"]),
+               plt.Line2D([], [], color=t["ink"], lw=1.2)]
+    fig.legend(handles, ["Bel", "Pl − Bel", "Pl as reported"], loc="lower center", ncol=3,
+               bbox_to_anchor=(0.5, -0.1))
+    fig.subplots_adjust(wspace=0.12)
+    return fig
+
+
 FIGURES = {"pipeline": fig_pipeline, "intervals": fig_intervals, "powerset": fig_powerset,
            "rules": fig_rules, "blame": fig_blame, "abstain": fig_abstain, "ood": fig_ood,
-           "pbox": fig_pbox, "belnap": fig_belnap, "tracking": fig_tracking, "agents": fig_agents}
+           "pbox": fig_pbox, "belnap": fig_belnap, "tracking": fig_tracking, "agents": fig_agents,
+           "corrections": fig_corrections}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

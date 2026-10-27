@@ -85,7 +85,7 @@ class RandomInterval:
         k = (w * empty).sum(-1)
         w = w * ~empty
         if normalise:
-            w = w / (1 - k).clamp_min(1e-12).unsqueeze(-1)
+            w = w / w.sum(-1, keepdim=True).clamp_min(1e-12)   # = 1 − κ, without cancellation
         hi = torch.where(empty, lo, hi)
         return RandomInterval(lo, hi, w), k
 
